@@ -32,8 +32,6 @@ public class MissileController implements Runnable{
                     if ((xExplosion >= ships.get(i).getX()) && (xExplosion <= (ships.get(i).getX() + ships.get(i).getWidth())) &&
                             (yExplosion >= ships.get(i).getY()) && (yExplosion <= (ships.get(i).getY() + ships.get(i).getHeight()))
                             && !sea.getScoreShowing()){
-                        //System.out.println("talalta: "+ ships.get(i).getClass().getSimpleName());
-                        //System.out.println(missile.getClass().getSimpleName() + " (" + missile.getX() + " " + missile.getY() + ")");
                         missile.setExplosion(0);
                         sea.modifyShips(i);     //elhelyezi a map vegere es a main megoldja
                         missile.setHit(1);
