@@ -1,0 +1,5 @@
+Levi 22
+Andras 10
+Feri 40
+Player 27
+Lili 23
