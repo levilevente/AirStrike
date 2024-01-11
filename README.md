@@ -29,7 +29,7 @@
 # License
 
 - all the pngs are from [OpenGameArt](https://opengameart.org/)
-[Your Project Name] Software License
+AirStrike Software License
 
 Version 1.0, 11.01.2024
 
