@@ -1,16 +1,16 @@
-#Airstrike
+# Airstrike
 
 Hit with bombs the ships to get more points.
 
-#Description
+# Description
 
 Start the game write your name and your preffered round time to play and enjoy the game.
 
-#Getting Started
+# Getting Started
 Java Development Kit (JDK) installed
 Git installed (optional)
 
-#Controls
+## Controls
 W button: Move the plane upward
 S button: Move the plane downward
 A button: Move the plane to the left
@@ -18,10 +18,10 @@ D button: Move the plane to the right
 Space Bar: Shoot to hit ships (3 sec requierd for the bomb to explode after dropping)
 
 
-#Customizing Round Time
+## Customizing Round Time
 You can customize the round time in OPTIONS by entering the desired duration when prompted at the beginning of each round.
 
 
-#Version
+# Version
 - 0.1
     - initial Release
