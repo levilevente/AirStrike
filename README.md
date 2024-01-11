@@ -31,7 +31,7 @@
 - all the pngs are from [OpenGameArt](https://opengameart.org/)
 [Your Project Name] Software License
 
-Version 1.0, [Date]
+Version 1.0, 11.01.2024
 
 1. **License Grant**
 
@@ -49,4 +49,4 @@ Version 1.0, [Date]
 
 4. **Contact**
 
-   For any questions regarding this license, please contact [Your Name] at [Your Email Address].
+   For any questions regarding this license, please contact [D. Levente] at [daroczilevente2@gmail.com].
