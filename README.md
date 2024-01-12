@@ -4,7 +4,7 @@
 
 # Description
 
-- Start the game write your name and your preferred round time to play and enjoy the game.
+- Start the 2D game, write your name, your preferred round time to play and enjoy the game.
 
 # Getting Started
 - Java Development Kit (JDK) installed
