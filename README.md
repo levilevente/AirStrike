@@ -34,4 +34,4 @@ Version 1.0, 11.01.2024
 
 1. **Contact**
 
-   For any questions regarding this license, please contact D. Levente at daroczilevente2@gmail.com.
+   For any questions please contact D. Levente at daroczilevente2@gmail.com.
