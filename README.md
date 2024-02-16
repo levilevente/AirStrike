@@ -26,12 +26,6 @@
 - 1.0
     - initial Release
 
-# License
-
 - all the pngs and sounds: [OpenGameArt](https://opengameart.org/)
   
 Version 1.0, 11.01.2024
-
-1. **Contact**
-
-   For any questions please contact D. Levente at daroczilevente2@gmail.com.
