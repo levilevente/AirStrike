@@ -1,31 +1,80 @@
-# AirStrike
+# ✈️ AirStrike
 
-- Hit with bombs the ships to get more points.
+![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
+![Version](https://img.shields.io/badge/Version-1.0-blue?style=for-the-badge)
+![Game](https://img.shields.io/badge/Genre-2D%20Arcade-red?style=for-the-badge)
 
-# Description
+> **Pilot your plane, drop bombs, and sink the enemy fleet!**
+> AirStrike is a classic 2D arcade game where precision timing is key.
 
-- Start the 2D game, write your name, your preferred round time to play and enjoy the game.
+---
 
-# Getting Started
-- Java Development Kit (JDK) installed
-- Git installed (optional)
+## 📖 Overview
 
-## Controls
-- W button: Move the plane upward
-- S button: Move the plane downward
-- A button: Move the plane to the left
-- D button: Move the plane to the right
-- Space Bar: Shoot to hit ships (3 sec required for the bomb to explode after dropping)
+**AirStrike** is a 2D aerial combat game developed in Java. The objective is simple: destroy as many enemy ships as possible to maximize your score before time runs out.
+
+Unlike standard shooters, this game requires strategic timing—bombs take **3 seconds** to detonate after dropping, so you must lead your targets!
+
+---
+
+## 🎮 How to Play
+
+1.  **Start the Game:** Launch the application.
+2.  **Profile Setup:** Enter your **Player Name** to track your score.
+3.  **Configuration:** Set your preferred **Round Time** in the Options menu.
+4.  **Fight:** Maneuver your plane and destroy targets to earn points.
+
+### 🕹️ Controls
+
+| Key | Action |
+| :---: | :--- |
+| **W** | ⬆️ Move Up |
+| **S** | ⬇️ Move Down |
+| **A** | ⬅️ Move Left |
+| **D** | ➡️ Move Right |
+| **Space Bar** | 💣 **Drop Bomb** |
+
+> **⚠️ Strategic Note:** Bombs have a **3-second fuse**. You must drop them *ahead* of the ships to ensure a direct hit!
+
+---
+
+## ⚙️ Installation & Setup
+
+### Prerequisites
+* **Java Development Kit (JDK):** Ensure Java is installed on your system.
+* **Git (Optional):** For cloning the repository.
+
+### Getting Started
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/levilevente/AirStrike.git
+    ```
+
+2.  **Run the Game**
+    * Open the project in your preferred IDE (IntelliJ, Eclipse, VS Code).
+    * Locate the Main class file.
+    * Run the application.
+
+---
+
+## 📸 Screenshots
+
+<img width="634" height="615" alt="image" src="https://github.com/user-attachments/assets/acae3c33-9b0f-4ee7-a159-5da80e7e1bb7" />
+<img width="633" height="609" alt="image" src="https://github.com/user-attachments/assets/d95ccc3e-5e27-4338-ba1e-855d667a7dd4" />
 
 
-## Customizing Round Time
-- You can customize the round time in OPTIONS by entering the desired duration when prompted at the beginning of each round.
+---
 
+## 🎨 Credits & Assets
 
-# Version
-- 1.0
-    - initial Release
+* **Development:** Levente Daroczi
+* **Graphics & Sound:** All sprites and audio assets were sourced from [OpenGameArt](https://opengameart.org).
 
-- all the pngs and sounds: [OpenGameArt](https://opengameart.org/)
-  
-Version 1.0, 11.01.2024
+---
+
+## 📜 Release History
+
+* **v1.0** (11.01.2024)
+    * Initial Release.
+    * Basic movement and bombing mechanics implemented.
+    * Custom round time feature added.
