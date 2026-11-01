@@ -1,20 +1,16 @@
 package Plane;
 
-import javax.imageio.ImageIO;
+import Util.Images;
+
 import java.awt.image.BufferedImage;
-import java.io.File;
 
 public class PlaneModel extends Plane{
 
-    private BufferedImage image;
+    private volatile BufferedImage image;
 
     public PlaneModel(int x, int y, int width, int height) {
         super(x, y, width, height, true);
-        try{
-            image = ImageIO.read(new File("Images/Plane.png"));
-        }catch (Exception e){
-            System.out.println("The plane image can't be opened!");
-        }
+        image = Images.load("Images/Plane.png");
     }
 
     @Override

@@ -1,7 +1,6 @@
 package Plane;
 
 import Panels.Sea;
-import Plane.Plane;
 
 public class PlaneController implements Runnable{
     private Plane plane;
@@ -15,41 +14,31 @@ public class PlaneController implements Runnable{
     @Override
     public void run() {
         while(plane.getMoving()){
-
-
             //if the plane exit from map on the right or left
             if (plane.getX() < -plane.getWidth()){
-                plane.setX(640);
-            }else if (plane.getX() > 640){
+                plane.setX(Sea.SIZE);
+            }else if (plane.getX() > Sea.SIZE){
                 plane.setX(-plane.getWidth());
             }
 
             //if the plane exit from map on north or south
             if (plane.getY() < -plane.getHeight()){
-                plane.setY(640);
-            }else if (plane.getY() > 640){
+                plane.setY(Sea.SIZE);
+            }else if (plane.getY() > Sea.SIZE){
                 plane.setY(-plane.getHeight());
             }
 
-
             switch (plane.getDirection()){
-                case 2:                 //down
-                    plane.setY(plane.getY() + 1);
-                    break;
-                case 0:                 //forward
-                    plane.setY(plane.getY() - 1);
-                    break;
-                case 1:                 //right
-                    plane.setX(plane.getX() + 1);
-                    break;
-                case 3:                 //left
-                    plane.setX(plane.getX() - 1);
-                    break;
+                case Plane.UP -> plane.setY(plane.getY() - 1);
+                case Plane.RIGHT -> plane.setX(plane.getX() + 1);
+                case Plane.DOWN -> plane.setY(plane.getY() + 1);
+                case Plane.LEFT -> plane.setX(plane.getX() - 1);
             }
             try{
                 Thread.sleep(7);
             }catch (InterruptedException e){
-                e.getMessage();
+                Thread.currentThread().interrupt();
+                return;
             }
             sea.repaint();
         }

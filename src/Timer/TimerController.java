@@ -13,12 +13,13 @@ public class TimerController implements Runnable{
     @Override
     public void run(){
         while (model.getStart() > model.getStop()){
-            model.setStart(model.getStart() - 1);
             try{
                 Thread.sleep(1000);
             }catch(InterruptedException e){
-                System.out.println("Hiba a szal vegrehajtasaban.");
+                Thread.currentThread().interrupt();
+                return;
             }
+            model.setStart(model.getStart() - 1);
             view.repaint();
         }
     }

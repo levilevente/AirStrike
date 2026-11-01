@@ -1,16 +1,12 @@
-import javax.imageio.ImageIO;
-import javax.sound.sampled.*;
+import javax.sound.sampled.Clip;
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
-import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
-import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import Missile.*;
 import Panels.*;
@@ -18,484 +14,336 @@ import Plane.*;
 import ShipPackage.*;
 import Strategy.*;
 import Timer.*;
+import Util.Images;
+import Util.Sound;
 
 public class AirstrikeFrame extends JFrame {
 
-    private List<Ship> ships;
-    private Sea sea;
-    private Plane plane;
-    private List <Missile> missiles;
-    private ShipController[] shipController;
-    private PlaneController planeController;
-    private MissileController missileController;
-    private JButton startButton;
-    private JButton optionsButton;
-    private TimerController timerControl;
-    private TimerModel timerModel;
-    private int timeForRound;
-    private static Clip clip;           //for music (changes between panels)
-    private String playerName;
+    private static final String LEADERBOARD_FILE = "leaderboard.txt";
+    private static final String MENU_SONG = "Sound/MenuSong.wav";
+    private static final String BATTLE_SONG = "Sound/BattleSong.wav";
+    private static final float MUSIC_VOLUME = -15.0f;
+    private static final Font TEXT_FONT = new Font("Times New Roman", Font.BOLD, 20);
+
+    private static final int MIN_ROUND_TIME = 40;
+    private static final int MAX_ACTIVE_MISSILES = 3;
+    private static final int MISSILE_LIFETIME = 5;      // seconds: 3 seconds falling + 2 seconds explosion
+    private static final int PLANE_WINGSPAN = 35;       // plane width when it flies up or down
+    private static final int PLANE_LENGTH = 45;         // plane height when it flies up or down
+    private static final int MISSILE_WIDTH = 7;
+    private static final int MISSILE_LENGTH = 9;
+
+    // names of the cards in the card layout
+    private static final String MENU_CARD = "menuPanel";
+    private static final String SEA_CARD = "sea";
+    private static final String OPTIONS_CARD = "optionsPanel";
+    private static final String LEADERBOARD_CARD = "leaderboardPanel";
+    private static final String CONTROLS_CARD = "controlsPanel";
+    private static final String FINAL_CARD = "finalPanel";
+
+    private final List<Ship> ships = new CopyOnWriteArrayList<>();     // read by the missile and paint threads
+    private final List<Missile> missiles = new ArrayList<>();          // only used on the Swing thread
+    private final Plane plane;
+    private final Sea sea;
+    private final TimerModel timerModel;
+    private final Strategy leaderboard = new Java8Strategy();
+
+    private final CardLayout layout = new CardLayout();
+    private final JPanel cardPanel = new JPanel(layout);
+    private final JTextArea leaderboardText = makeTextArea("");
+
+    // images for each direction (index = Plane.UP, RIGHT, DOWN, LEFT)
+    private final BufferedImage[] planeImages = rotations(Images.load("Images/Plane.png"));
+    private final BufferedImage[] missileImages = rotations(Images.load("Images/Missile.png"));
+
+    private volatile boolean gameRunning = false;
+    private Clip music;                 //for music (changes between panels)
+    private String playerName = "Player";
 
     public AirstrikeFrame(){
-
-        this.timeForRound = 40;
         this.setDefaultCloseOperation(EXIT_ON_CLOSE);
-        this.setBounds(100,100,640,640);
+        this.setBounds(100,100,Sea.SIZE,Sea.SIZE);
         this.setTitle("Airstrike");
         this.setLayout(new BorderLayout());
         this.setResizable(false);
 
-        addSong("Sound/MenuSong.wav");
+        music = Sound.play(MENU_SONG, MUSIC_VOLUME, true);
 
-
-        plane = new PlaneModel(320,320,35,45);
-        missiles = new ArrayList<Missile>(3);
-        ships = new ArrayList<>();
-        //adding the first ships to panel
-        ships.add(new RandomShipGenerator(3).getRandomShip());
-        ships.add(new RandomShipGenerator(4).getRandomShip());
-        ships.add(new RandomShipGenerator(5).getRandomShip());
-        ships.add(new RandomShipGenerator(1).getRandomShip());
-        ships.add(new RandomShipGenerator(2).getRandomShip());
-        ships.add(new RandomShipGenerator(6).getRandomShip());
-        timerModel = new TimerModel(timeForRound, 0);
-
-        Thread[] missilesThread = new Thread[3];
-        Thread[] shipthreads = new Thread[6];
-
-        int threadIndex = 0;
-        shipController = new ShipController[6];
+        plane = new PlaneModel(320,320,PLANE_WINGSPAN,PLANE_LENGTH);
+        timerModel = new TimerModel(MIN_ROUND_TIME, 0);
         sea = new Sea(ships, plane, missiles, timerModel);
-        for (Ship i : ships){
-            shipController[threadIndex] = new ShipController(i,sea);
-            shipthreads[threadIndex] = new Thread(shipController[threadIndex]);
-            shipthreads[threadIndex].start();
-            threadIndex++;
+
+        //adding the first ships, one in each zone
+        for (int zone = 1; zone <= RandomShipGenerator.ZONE_COUNT; zone++){
+            ships.add(startShip(new RandomShipGenerator(zone).getRandomShip()));
         }
 
-
-
-        CardLayout layout = new CardLayout();
-        JPanel cardPanel = new JPanel(); //fontos
-        cardPanel.setLayout(layout);
+        cardPanel.add(createMenuPanel(), MENU_CARD);
+        cardPanel.add(sea, SEA_CARD);
+        cardPanel.add(createOptionsPanel(), OPTIONS_CARD);
+        cardPanel.add(createLeaderboardPanel(), LEADERBOARD_CARD);
+        cardPanel.add(createControlsPanel(), CONTROLS_CARD);
         this.add(cardPanel);
 
+        cardPanel.setFocusable(true);       //the key listener only works when the card panel is in focus
+        cardPanel.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                handleKey(e.getKeyChar());
+            }
+        });
 
-        // Creating a panel for menu
+        this.setVisible(true);
+        cardPanel.requestFocusInWindow();
+    }
+
+    // runs until the round time is over, then shows the final panel
+    public void runGame(){
+        while (timerModel.getStart() > timerModel.getStop()) {
+            //replace the ships that left the map or were destroyed with a new ship in the same zone
+            for (int i = 0; i < ships.size(); i++) {
+                Ship ship = ships.get(i);
+                if (ship.isGone()) {
+                    ships.set(i, startShip(new RandomShipGenerator(ship.getZone()).getRandomShip()));
+                }
+            }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        endGame();
+    }
+
+    private Ship startShip(Ship ship){
+        new Thread(new ShipController(ship, sea)).start();
+        return ship;
+    }
+
+    private JPanel createMenuPanel(){
         MenuPanel menuPanel = new MenuPanel();
         menuPanel.setLayout(new GridLayout(4,1));
-        JButton playButton = makeButton("Images/Buttons/PlayButton.png", 400, 130);     //play button
-        JButton optionsButton = makeButton("Images/Buttons/OptionsButton.png", 400, 130);   //OptionsSettings button (set time for game and name of the player)
+        JButton playButton = makeButton("Images/Buttons/PlayButton.png", 400, 130);
         JButton leaderboardButton = makeButton("Images/Buttons/LeaderboardButton.png", 400, 130);   //shows the saved players and their scores
-        JButton controlsButton = makeButton("Images/Buttons/ControlsButton.png", 400, 130);   //shows the saved players and their scores
+        JButton optionsButton = makeButton("Images/Buttons/OptionsButton.png", 400, 130);   //set the name of the player and the time for the game
+        JButton controlsButton = makeButton("Images/Buttons/ControlsButton.png", 400, 130);   //shows the keys
         menuPanel.add(playButton);
         menuPanel.add(leaderboardButton);
         menuPanel.add(optionsButton);
         menuPanel.add(controlsButton);
 
+        playButton.addActionListener(e -> startGame());
+        leaderboardButton.addActionListener(e -> showLeaderboard());
+        optionsButton.addActionListener(e -> layout.show(cardPanel, OPTIONS_CARD));
+        controlsButton.addActionListener(e -> layout.show(cardPanel, CONTROLS_CARD));
+        return menuPanel;
+    }
 
-
-        //Creating panel for options
+    private JPanel createOptionsPanel(){
         OptionsPanel optionsPanel = new OptionsPanel();
         optionsPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 20,300));
-        JTextArea textArea = new JTextArea("Name TimeForRound (min 40) ex: Levi 40");           //text area for getting the name and the time from the player
+        JTextArea textArea = new JTextArea("Name TimeForRound (min 40) ex: Levi 40");    //the player writes the name and the time here
         textArea.setPreferredSize(new Dimension(370,30));
         textArea.setFont(new Font("Times New Roman", Font.PLAIN,20));
+        JButton submitButton = makeButton("Images/Buttons/SaveButton.png", 100, 50);
+        JButton backButton = makeButton("Images/Buttons/BackButton.png", 100, 50);
         optionsPanel.add(textArea);
-        JButton submitButton= makeButton("Images/Buttons/SaveButton.png", 100, 50);    //adding Submit/Save button
-        JButton backButton= makeButton("Images/Buttons/BackButton.png", 100, 50);       //adding a back button wich drop us back to menu panel
         optionsPanel.add(submitButton);
         optionsPanel.add(backButton);
 
+        submitButton.addActionListener(e -> saveOptions(textArea.getText()));
+        backButton.addActionListener(e -> layout.show(cardPanel, MENU_CARD));
+        return optionsPanel;
+    }
 
-
-
-        //Creating panel for leaderboard
+    private JPanel createLeaderboardPanel(){
         LeaderboardPanel leaderboardPanel = new LeaderboardPanel();
         leaderboardPanel.setLayout(new BorderLayout());
-        JButton viewedBoard = makeButton("Images/Buttons/BackButton.png", 200, 100);     //get us back to menu panel
-        leaderboardPanel.add(viewedBoard, BorderLayout.SOUTH);
+        JButton backButton = makeButton("Images/Buttons/BackButton.png", 200, 100);
+        leaderboardPanel.add(makeScrollPane(leaderboardText), BorderLayout.CENTER);
+        leaderboardPanel.add(backButton, BorderLayout.SOUTH);
 
+        backButton.addActionListener(e -> layout.show(cardPanel, MENU_CARD));
+        return leaderboardPanel;
+    }
 
-
-        //Creating panel for controls
+    private JPanel createControlsPanel(){
         ControlsPanel controlsPanel = new ControlsPanel();
         controlsPanel.setLayout(new BorderLayout());
-        JButton backToMenu = makeButton("Images/Buttons/BackButton.png", 100, 50);
-        controlsPanel.add(backToMenu, BorderLayout.SOUTH);
+        JButton backButton = makeButton("Images/Buttons/BackButton.png", 100, 50);
+        controlsPanel.add(backButton, BorderLayout.SOUTH);
 
+        backButton.addActionListener(e -> layout.show(cardPanel, MENU_CARD));
+        return controlsPanel;
+    }
 
+    private void startGame(){
+        if (gameRunning){
+            return;
+        }
+        gameRunning = true;
+        layout.show(cardPanel, SEA_CARD);
+        cardPanel.requestFocusInWindow();       //the clicked button has the focus, the keys must go to the card panel
 
-        // adding the panels to the cardPanel
-        cardPanel.add(menuPanel, "menuPanel");
-        cardPanel.add(sea, "sea");
-        cardPanel.add(optionsPanel, "optionsPanel");
-        cardPanel.add(leaderboardPanel, "leaderboardPanel");
-        cardPanel.add(controlsPanel, "controlsPanel");
+        new Thread(new PlaneController(plane, sea)).start();
+        new Thread(new TimerController(timerModel, new TimerView(timerModel))).start();
 
+        Sound.stop(music);
+        music = Sound.play(BATTLE_SONG, MUSIC_VOLUME, true);
+    }
 
+    private void showLeaderboard(){
+        StringBuilder text = new StringBuilder();
+        for (Players p : leaderboard.processFile(LEADERBOARD_FILE)) {
+            text.append(p).append('\n');
+        }
+        leaderboardText.setText(text.toString());
+        layout.show(cardPanel, LEADERBOARD_CARD);
+    }
 
-        //play button:
-        playButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                layout.show(cardPanel, "sea");          //shows the sea
-                planeController = new PlaneController(plane, sea);  //starts the plane
-                Thread planeThread = new Thread(planeController);
-                planeThread.start();
-
-
-                //Creating timer for the game
-                TimerView timerView = new TimerView(timerModel);        //starts the timer
-                timerControl = new TimerController(timerModel,timerView);
-                Thread threadTimer = new Thread(timerControl);
-                threadTimer.start();
-                timerView.setPreferredSize(new Dimension(20,40));
-
-                stopSound();                //plays other song
-                addSong("Sound/BattleSong.wav");
+    // the text must be "Name Time", for example "Levi 40"
+    private void saveOptions(String text){
+        String[] tokens = text.trim().split("\\s+");
+        int chosenTime;
+        try {
+            if (tokens.length != 2) {
+                throw new NumberFormatException();
             }
-        });
-        //leaderboard button:
-        leaderboardButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                layout.show(cardPanel, "leaderboardPanel");     //show the leaderboard with the back button on it
-                Java8Strategy java8Strategy = new Java8Strategy();
-                List<Players> info = java8Strategy.processFile("leaderboard.txt");
-                StringBuilder stringInfo = new StringBuilder();
-                for (Players p : info) {
-                    stringInfo.append(p.toString()).append('\n');
-                }
-                JTextArea finalText = new JTextArea(stringInfo.toString());
+            chosenTime = Integer.parseInt(tokens[1]);
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Write your name and the time for the round, for example: Levi 40",
+                    "Wrong format", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        playerName = tokens[0];
+        timerModel.setStart(Math.max(chosenTime, MIN_ROUND_TIME));      //the time for the game needs to be min 40
+        JOptionPane.showMessageDialog(this, "Saved: " + playerName + ", " + timerModel.getStart() + " seconds");
+    }
 
-                finalText.setOpaque(false);                // set JTextArea background to be transparent
+    private void handleKey(char key){
+        if (!gameRunning){
+            return;
+        }
+        switch (Character.toLowerCase(key)){
+            case 'w' -> turnPlane(Plane.UP);
+            case 'd' -> turnPlane(Plane.RIGHT);
+            case 's' -> turnPlane(Plane.DOWN);
+            case 'a' -> turnPlane(Plane.LEFT);
+            case ' ' -> dropMissile();      // 'Space' key means the plane drops a bomb
+        }
+    }
 
+    private void turnPlane(int direction){
+        // the plane is wider than high when it flies left or right; keep its center at the same place
+        boolean horizontal = isHorizontal(direction);
+        int width = horizontal ? PLANE_LENGTH : PLANE_WINGSPAN;
+        int height = horizontal ? PLANE_WINGSPAN : PLANE_LENGTH;
+        int centerX = plane.getX() + plane.getWidth() / 2;
+        int centerY = plane.getY() + plane.getHeight() / 2;
 
-                finalText.setForeground(Color.BLACK);                // set JTextArea font color (foreground) to be readable
-                finalText.setFont(new Font("Times New Roman", Font.BOLD, 20));
+        plane.setImage(planeImages[direction]);
+        plane.setWidth(width);
+        plane.setHeight(height);
+        plane.setX(centerX - width / 2);
+        plane.setY(centerY - height / 2);
+        plane.setDirection(direction);
+    }
 
-                JScrollPane scrollPane = new JScrollPane(finalText);
-                scrollPane.getViewport().setOpaque(false);
-                scrollPane.setBounds(100,100,100,100);
-                leaderboardPanel.add(scrollPane, BorderLayout.CENTER);                // add the JTextArea to the leaderboardPanel
+    private void dropMissile(){
+        if (sea.activeMissiles() >= MAX_ACTIVE_MISSILES){      // only 3 bombs can be 'active' (dropped)
+            return;
+        }
+        int direction = plane.getDirection();
+        boolean horizontal = isHorizontal(direction);
+        int width = horizontal ? MISSILE_LENGTH : MISSILE_WIDTH;
+        int height = horizontal ? MISSILE_WIDTH : MISSILE_LENGTH;
+        //the bomb starts from the center of the plane
+        int x = plane.getX() + plane.getWidth() / 2 - width / 2;
+        int y = plane.getY() + plane.getHeight() / 2 - height / 2;
 
-                //when the button is pressed the menu panel will be displayed
-                viewedBoard.addActionListener(new ActionListener() {
-                    @Override
-                    public void actionPerformed(ActionEvent e) {
-                        layout.show(cardPanel, "menuPanel");
-                    }
-                });
+        Missile newMissile = new MissileModel(x, y, width, height, MISSILE_LIFETIME);
+        newMissile.setImage(missileImages[direction]);
 
-            }
-        });
-        //options button:
-        optionsButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                layout.show(cardPanel, "optionsPanel");     //options panel displayed
-                submitButton.addActionListener(new ActionListener() {
-                    @Override
-                    public void actionPerformed(ActionEvent e) {
-                        //if the submit button is pressed the information is being collected
-                        String text = textArea.getText();
-                        String [] tokens = text.split(" ");
-                        setPlayerName(tokens[0]);
-                        int chosedTime = Integer.parseInt(tokens[1]);
-                        if (chosedTime < 40) {      //the time for the game needs to be min 40
-                            setPlayerName("Player"+chosedTime);
-                            setTimeForRound(40);
-                        }else{
-                            setTimeForRound(chosedTime);
-                        }
-                    }
-                });
-
-                backButton.addActionListener(new ActionListener() {
-                    @Override
-                    public void actionPerformed(ActionEvent e) {
-                        layout.show(cardPanel,"menuPanel");
-                    }   //back to menu
-                });
-            }
-        });
-        //controls button:
-        controlsButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                layout.show(cardPanel, "controlsPanel");
-                backToMenu.addActionListener(new ActionListener() {
-                    @Override
-                    public void actionPerformed(ActionEvent e) {
-                        layout.show(cardPanel, "menuPanel");
-                    }
-                });
-            }
-        });
-
-
-        cardPanel.setFocusable(true);       //adding key listeners to game card panel needs to be in focus
-        cardPanel.requestFocusInWindow();
-        cardPanel.addKeyListener(new KeyListener() {
-            @Override
-            public void keyTyped(KeyEvent e){}
-
-            @Override
-            public void keyPressed(KeyEvent e) {
-                BufferedImage pi;
-                try {
-                    pi = ImageIO.read(new File("Images/Plane.png"));
-                } catch (IOException ex) {
-                    throw new RuntimeException(ex);
-                }
-                switch (e.getKeyChar()){
-                    //depending on wich button is pressed the direction and image direction are saved again
-                    case 'w':
-                    case 'W':
-                        plane.setDirection(0);
-                        plane.setImage(rotateImage(pi, 0));
-                        break;
-                    case 's':
-                    case 'S':
-                        plane.setDirection(2);
-                        plane.setImage(rotateImage(pi, 180));
-                        break;
-                    case 'a':
-                    case 'A':
-                        plane.setDirection(3);
-                        plane.setImage(rotateImage(pi, 270));
-                        break;
-                    case 'd':
-                    case 'D':
-                        plane.setDirection(1);
-                        plane.setImage(rotateImage(pi, 90));
-                        break;
-                    case ' ':       // 'Space' key means the plane drops a bomb
-                        if (sea.activeMissiles() < 3){      // only 3 bombs can be 'active' (dropped)
-                            //setting the missile coordinates
-                            Missile newMissile = new MissileModel(plane.getX() + plane.getWidth() / 2 - 3 , plane.getY() + plane.getHeight()/2 - 2, 5, 9, 5);
-                            try {
-                                BufferedImage mi = ImageIO.read(new File("Images/Missile.png"));
-                                newMissile.setImage(rotateImage(mi, plane.getDirection() * 90));    //rotating the image as well as the plane image
-                                newMissile.setHeight(9);
-                                newMissile.setWidth(7);
-                            } catch (IOException ex) {
-                                throw new RuntimeException(ex);
-                            }
-                            if (missiles.size() <= 2){  //  the first 3 missiles are added and (else) the other ones are modified
-                                missiles.add(newMissile);
-                                missileController = new MissileController(missiles.get(missiles.size() - 1), sea);
-                                missilesThread[missiles.size() - 1] = new Thread(missileController);
-                                missilesThread[missiles.size() - 1].start();
-                            } else{
-                                for (int i = 0; i < missiles.size(); i++){
-                                    if (missiles.get(i).getActive() == 0){
-                                        missiles.set(i, newMissile);
-                                        missileController = new MissileController(missiles.get(i), sea);
-                                        missilesThread[i] = new Thread(missileController);
-                                        missilesThread[i].start();
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        break;
-                }
-            }
-            @Override
-            public void keyReleased(KeyEvent e) {}
-        });
-
-
-        this.setVisible(true);      // this later because the time delay
-
-
-        while (timerModel.getStart() > timerModel.getStop()) {
-            for (int i = 0; i < ships.size(); i++) {
-                //checking if the ships needs to be replaced or not (when missile hits a ship the sip coordinates will be 640)
-                if (ships.get(i).getY() <= (-1 * ships.get(i).getHeight())) {
-                    int zone = ships.get(i).getZone();
-                    ships.set(i, new RandomShipGenerator(zone).getRandomShip());
-                    shipController[i] = new ShipController(ships.get(i),sea);
-                    shipthreads[i] = new Thread(shipController[i]);
-                    shipthreads[i].start();
-                }
+        //reuse the place of an old missile, so the list has max 3 missiles
+        int freeIndex = -1;
+        for (int i = 0; i < missiles.size(); i++){
+            if (missiles.get(i).getActive() == 0){
+                freeIndex = i;
+                break;
             }
         }
-
-        //stop the moving
-        plane.setMoving(false);
-        for (Thread stopThread : shipthreads){
-            if (stopThread.isAlive()){
-                stopThread.stop();
-            }
+        if (freeIndex >= 0){
+            missiles.set(freeIndex, newMissile);
+        } else {
+            missiles.add(newMissile);
         }
+        new Thread(new MissileController(newMissile, sea)).start();
+    }
 
+    private void endGame(){
+        gameRunning = false;
+        plane.setMoving(false);         //the ships stop by themselves when the time is over
         sea.setScoreShowing(true);
 
-        String fileName = "leaderboard.txt";
-        if (playerName == null){
-            playerName = "Player";
-        }
+        int score = sea.getDestroyedShipScore();
+        leaderboard.saveScore(LEADERBOARD_FILE, new Players(playerName, score));
 
-        int newScore = sea.getDestroyedShipScore();
-        //update the leaderboards
-        try (BufferedReader bufferedReader = new BufferedReader(new FileReader(fileName))) {
-            List<String> lines = new ArrayList<>();
+        SwingUtilities.invokeLater(() -> showFinalPanel(score));
+    }
 
-            String line;
-            boolean playerExists = false;
-
-            // read each line in the file
-            while ((line = bufferedReader.readLine()) != null) {
-                String[] parts = line.split(" ");
-                String existingPlayerName = parts[0];
-                int existingScore = Integer.parseInt(parts[1]);
-
-                // check if the player exists in the file
-                if (existingPlayerName.equals(playerName)) {
-                    playerExists = true;
-
-                    // update the score if the new score is higher
-                    if (newScore > existingScore) {
-                        existingScore = newScore;
-                    }
-                }
-
-                // add the existing or updated line to the list
-                lines.add(existingPlayerName + " " + existingScore);
-            }
-
-            // if the player does not exist, add a new line
-            if (!playerExists) {
-                lines.add(playerName + " " + newScore);
-            }
-
-            // write the updated lines back to the file
-            try (BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(fileName))) {
-                for (String updatedLine : lines) {
-                    bufferedWriter.write(updatedLine);
-                    bufferedWriter.newLine();
-                }
-            }
-
-        } catch (IOException e) {
-            System.err.println("Error updating the leaderboard: " + e.getMessage());
-        }
-
-
-        //adding the final panel with the score and a button (exit) on it
-
-        FinalPanel finalPanel = new FinalPanel(sea.getDestroyedShipScore());
-        cardPanel.add(finalPanel, "finalPanel");
+    //the final panel shows the score, the statistics and an exit button
+    private void showFinalPanel(int score){
+        FinalPanel finalPanel = new FinalPanel(score);
         finalPanel.setLayout(new BorderLayout());
         JButton finalExit = makeButton("Images/Buttons/StopButton.png", 200,100);
-        finalExit.setBounds(350,200, finalExit.getPreferredSize().width, finalExit.getPreferredSize().height);
+        finalExit.addActionListener(e -> System.exit(0));
 
-
-        Java8Strategy java8Strategy = new Java8Strategy();
-        List<Players> info = java8Strategy.processFile("leaderboard.txt");
-
-        String finalStatistics = java8Strategy.printStatistics(info);        //everytime when the leaderboard button is pressed on the console will be displayed the statistics
-
-        JTextArea finalText = new JTextArea(finalStatistics);
-
-        finalText.setOpaque(false);                // set JTextArea background to be transparent
-
-
-        finalText.setForeground(Color.BLACK);                // set JTextArea font color (foreground) to be readable
-        finalText.setFont(new Font("Times New Roman", Font.BOLD, 20));
-
-        JScrollPane scrollPane = new JScrollPane(finalText);
-        scrollPane.getViewport().setOpaque(false);
-        scrollPane.setBounds(100,100,100,100);
-        finalPanel.add(scrollPane, BorderLayout.SOUTH);                // add the JTextArea to the leaderboardPanel
+        String finalStatistics = leaderboard.printStatistics(leaderboard.processFile(LEADERBOARD_FILE));     //the statistics are also printed on the console
+        finalPanel.add(makeScrollPane(makeTextArea(finalStatistics)), BorderLayout.SOUTH);
         finalPanel.add(finalExit, BorderLayout.NORTH);
 
-        layout.show(cardPanel, "finalPanel");
-        finalExit.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                System.exit(0);
-            }
-        });
-
-
+        cardPanel.add(finalPanel, FINAL_CARD);
+        layout.show(cardPanel, FINAL_CARD);
     }
 
-    private static BufferedImage rotateImage(BufferedImage img, double angle) {
+    private static boolean isHorizontal(int direction){
+        return direction == Plane.LEFT || direction == Plane.RIGHT;
+    }
 
-        double rads = Math.toRadians(angle);
-        double sin = Math.abs(Math.sin(rads)), cos = Math.abs(Math.cos(rads));
-        int w = img.getWidth();
-        int h = img.getHeight();
-        int newWidth = (int) Math.floor(w * cos + h * sin);
-        int newHeight = (int) Math.floor(h * cos + w * sin);
-
-        BufferedImage rotated = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g2d = rotated.createGraphics();
-        AffineTransform at = new AffineTransform();
-        at.translate((newWidth - w) / 2, (newHeight - h) / 2);
-
-        int x = w / 2;
-        int y = h / 2;
-
-        at.rotate(rads, x, y);
-        g2d.setTransform(at);
-        g2d.drawImage(img, 0, 0, null);
-        g2d.dispose();
-
+    private static BufferedImage[] rotations(BufferedImage image){
+        BufferedImage[] rotated = new BufferedImage[4];
+        if (image != null) {
+            for (int direction = 0; direction < 4; direction++) {
+                rotated[direction] = Images.rotate(image, direction * 90);
+            }
+        }
         return rotated;
     }
-    private static void playSound(String soundFile, float volume, boolean loop) {
-        try {
-            File file = new File(soundFile);
-            AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(file);
-            clip = AudioSystem.getClip();
-            clip.open(audioInputStream);
 
-            FloatControl gainControl = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
+    // transparent, read-only text
+    private static JTextArea makeTextArea(String text){
+        JTextArea textArea = new JTextArea(text);
+        textArea.setEditable(false);
+        textArea.setOpaque(false);
+        textArea.setForeground(Color.BLACK);
+        textArea.setFont(TEXT_FONT);
+        return textArea;
+    }
 
-            gainControl.setValue(volume);
-            if (loop){
-                clip.loop(Clip.LOOP_CONTINUOUSLY);
-            }else{
-                clip.start();
-            }
+    private static JScrollPane makeScrollPane(JTextArea textArea){
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+        return scrollPane;
+    }
 
-            clip.start();
-        } catch (IOException | UnsupportedAudioFileException | LineUnavailableException e) {
-            System.out.println("Error playing sound: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-    private static void stopSound() {
-        if (clip != null && clip.isRunning()) {
-            clip.stop();
-            clip.close();
-        }
-    }
-    private void addSong(String menuSong){
-        playSound(menuSong, -15.0f, true);
-    }
-    private void setTimeForRound(int timeForRound){
-        this.timeForRound = timeForRound;
-        timerModel.setStart(timeForRound);
-    }
-    private void setPlayerName(String playerName) {
-        this.playerName = playerName;
-    }
-    private JButton makeButton(String image, int width, int height){
-        ImageIcon imageIcon = null;
-        try{
-            BufferedImage img = ImageIO.read(new File(image));
-            Image scaledImage = img.getScaledInstance(width, height, Image.SCALE_SMOOTH);
-            imageIcon = new ImageIcon(scaledImage);
-        }catch (Exception e){
-            e.getMessage();
-        }
-        JButton button = new JButton(imageIcon);
+    private static JButton makeButton(String image, int width, int height){
+        BufferedImage img = Images.load(image);
+        JButton button = img != null
+                ? new JButton(new ImageIcon(img.getScaledInstance(width, height, Image.SCALE_SMOOTH)))
+                : new JButton(image);
         button.setBorderPainted(false);
         button.setFocusPainted(false);
         button.setContentAreaFilled(false);

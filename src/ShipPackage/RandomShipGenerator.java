@@ -3,9 +3,13 @@ package ShipPackage;
 import java.util.Random;
 
 public class RandomShipGenerator {
+    public static final int ZONE_COUNT = 6;
+    private static final int ZONE_WIDTH = 106;
+    private static final int START_Y = 640;     // ships start under the bottom of the map
+    private static final Random random = new Random();
+
     private int zone;
 
-    private final Random random = new Random();
     public RandomShipGenerator(int zone) {
         this.zone = zone;
     }
@@ -19,20 +23,15 @@ public class RandomShipGenerator {
     }
 
     public Ship getRandomShip(){
-        return switch (random.nextInt(6) + 1) {
-            case 1 ->  //battleship
-                    new BattleShip(random.nextInt(86) + ((zone - 1) * 106), 640, 20, 120, zone);
-            case 2 ->  //carrier
-                    new CarrierShip(random.nextInt(49) + ((zone - 1) * 106), 640, 57, 190, zone);
-            case 3 ->  //submarine
-                    new ShipSubMarineHullShip(random.nextInt(71)+ ((zone - 1) * 106), 640, 35, 142, zone);
-            case 4 ->  //cruiser
-                    new ShipCruiserHullShip(random.nextInt(83) + ((zone - 1) * 106), 640, 23, 128, zone);
-            case 5 -> //patrol
-                    new ShipPatrolHullShip(random.nextInt(93) + ((zone - 1) * 106), 640, 13, 55, zone);
-            case 6 -> //rescue
-                    new ShipRescueShip(random.nextInt(89) + ((zone - 1) * 106), 640, 17, 100, zone);
-            default -> null;
+        int zoneStart = (zone - 1) * ZONE_WIDTH;
+        // the random range keeps the ship (width + range <= ~106) inside its zone
+        return switch (random.nextInt(6)) {
+            case 0 -> new BattleShip(random.nextInt(86) + zoneStart, START_Y, 20, 120, zone);
+            case 1 -> new CarrierShip(random.nextInt(49) + zoneStart, START_Y, 57, 190, zone);
+            case 2 -> new ShipSubMarineHullShip(random.nextInt(71) + zoneStart, START_Y, 35, 142, zone);
+            case 3 -> new ShipCruiserHullShip(random.nextInt(83) + zoneStart, START_Y, 23, 128, zone);
+            case 4 -> new ShipPatrolHullShip(random.nextInt(93) + zoneStart, START_Y, 13, 55, zone);
+            default -> new ShipRescueShip(random.nextInt(89) + zoneStart, START_Y, 17, 100, zone);
         };
     }
 }

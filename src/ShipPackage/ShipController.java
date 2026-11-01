@@ -21,13 +21,14 @@ public class ShipController implements Runnable{
 
     @Override
     public void run() {
-        //System.out.println(sea.getTimerModel().getStart());
-        while (sea.getTimerModel().getStart() > 0){
+        // the thread ends when the ship is gone, the game loop then puts a new ship in its zone
+        while (sea.getTimerModel().getStart() > 0 && !ship.isGone()){
             ship.setY(ship.getY() - 1);
             try{
                 Thread.sleep(ship.getSpeed());
             }catch (InterruptedException e){
-                e.getMessage();
+                Thread.currentThread().interrupt();
+                return;
             }
             sea.repaint();
         }

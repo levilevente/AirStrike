@@ -1,26 +1,16 @@
 package Panels;
 
-import javax.imageio.ImageIO;
-import javax.swing.*;
+import Util.Images;
+
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.File;
 
-public class ControlsPanel extends JPanel {
-    private BufferedImage seaImage;
-    private BufferedImage controlsImage;
-    public ControlsPanel() {
-        try {
-            controlsImage = ImageIO.read(new File("Images/Keys.png"));
-            seaImage = ImageIO.read(new File("Images/Sea.png"));
-        } catch (Exception e) {
-            e.getMessage();
-        }
-    }
+public class ControlsPanel extends BackgroundPanel {
+    private final BufferedImage controlsImage = Images.load("Images/Keys.png");
 
     @Override
-    public void paintComponent(Graphics g) {
-        g.drawImage(seaImage,0,0,640,640,null);
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
         g.drawImage(controlsImage,170,300,300,100,null);
     }
 }

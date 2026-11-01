@@ -1,20 +1,15 @@
 package Missile;
 
-import javax.imageio.ImageIO;
-import javax.swing.*;
+import Util.Images;
+
 import java.awt.image.BufferedImage;
-import java.io.File;
 
 public class MissileModel extends Missile {
-    private BufferedImage image;
+    private volatile BufferedImage image;
 
     public MissileModel(int x, int y, int width, int height, int active) {
         super(x, y, width, height, active);
-        try{
-            image = ImageIO.read(new File("Images/Missile.png"));
-        }catch (Exception e){
-            System.out.println("The missile image can't be opened!");
-        }
+        image = Images.load("Images/Missile.png");
     }
 
     @Override

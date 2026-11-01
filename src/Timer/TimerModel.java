@@ -1,7 +1,9 @@
 package Timer;
 
 public class TimerModel {
-    private Integer start, stop;
+    // read by several threads (game loop, ships, painting), so the values must be volatile
+    private volatile int start;
+    private volatile int stop;
 
     public TimerModel(int start, int stop) {
         this.start = start;
@@ -16,11 +18,11 @@ public class TimerModel {
         this.stop = stop;
     }
 
-    public Integer getStart() {
+    public int getStart() {
         return start;
     }
 
-    public Integer getStop() {
+    public int getStop() {
         return stop;
     }
 }

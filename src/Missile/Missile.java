@@ -3,13 +3,12 @@ package Missile;
 import java.awt.image.BufferedImage;
 
 public abstract class Missile {
-    private int x;
-    private int y;
-    private int width;
-    private int height;
-    private int active;
-    private int explosion;
-    private int hit;
+    private volatile int x;
+    private volatile int y;
+    private volatile int width;
+    private volatile int height;
+    private volatile int active;    // seconds left: it explodes at 2 and disappears at 0
+    private volatile boolean hit;
 
     public Missile(int x, int y, int width, int height, int active) {
         this.x = x;
@@ -17,24 +16,15 @@ public abstract class Missile {
         this.width = width;
         this.height = height;
         this.active = active;
-        this.explosion = 0;
-        this.hit = 0;
+        this.hit = false;
     }
 
-    public int getHit() {
+    public boolean getHit() {
         return hit;
     }
 
-    public void setHit(int hit) {
+    public void setHit(boolean hit) {
         this.hit = hit;
-    }
-
-    public int getExplosion() {
-        return explosion;
-    }
-
-    public void setExplosion(int explosion) {
-        this.explosion = explosion;
     }
 
     public int getX() {

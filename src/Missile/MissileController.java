@@ -2,15 +2,15 @@ package Missile;
 
 import Panels.Sea;
 import ShipPackage.Ship;
+import Util.Images;
+import Util.Sound;
 
-import javax.imageio.ImageIO;
-import javax.sound.sampled.*;
-import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.IOException;
 import java.util.List;
 
 public class MissileController implements Runnable{
+    private static final int EXPLOSION_TIME = 2;    // the missile explodes when 2 seconds are left
+    private static final int EXPLOSION_SIZE = 20;
+
     private Missile missile;
     private Sea sea;
 
@@ -22,69 +22,44 @@ public class MissileController implements Runnable{
     @Override
     public void run() {
         while (missile.getActive() > 0){
-            if (missile.getActive() == 2){
-                missile.setExplosion(1);
-
-                List <Ship> ships = sea.getShips();
-                for(int i = 0; i < ships.size(); i++){
-                    int xExplosion = missile.getX();
-                    int yExplosion = missile.getY();
-                    if ((xExplosion >= ships.get(i).getX()) && (xExplosion <= (ships.get(i).getX() + ships.get(i).getWidth())) &&
-                            (yExplosion >= ships.get(i).getY()) && (yExplosion <= (ships.get(i).getY() + ships.get(i).getHeight()))
-                            && !sea.getScoreShowing()){
-                        missile.setExplosion(0);
-                        sea.modifyShips(i);     //elhelyezi a map vegere es a main megoldja
-                        missile.setHit(1);
-                    }
-                }
-                String soundFile;
-
-                try{
-                    BufferedImage explosion;
-                    if (missile.getHit() == 1){
-                        explosion = ImageIO.read(new File("Images/EffectImages/Explosion.png"));
-                        soundFile = "Sound/PositiveExplosion.wav";
-                        playSound(soundFile, -10.0f);
-
-                    }else{
-                        explosion = ImageIO.read(new File("Images/EffectImages/WaterExplosion.png"));
-                        soundFile = "Sound/NegativeExplosion.wav";
-                        playSound(soundFile, 0);
-
-                    }
-                    missile.setImage(explosion);
-                    missile.setWidth(20);
-                    missile.setHeight(20);
-                    missile.setX(missile.getX() - 5);
-                    missile.setY(missile.getY() - 5);
-                }catch (Exception e){
-                    System.out.println("The missile image can't be opened!");
-                }
+            if (missile.getActive() == EXPLOSION_TIME){
+                explode();
             }
             missile.setActive(missile.getActive() - 1);
             try{
                 Thread.sleep(1000);
             }catch (InterruptedException e){
-                e.getMessage();
+                Thread.currentThread().interrupt();
+                return;
             }
         }
     }
 
-    private static void playSound(String soundFile, float volume) {
-        try {
-            File file = new File(soundFile);
-            AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(file);
-            Clip clip = AudioSystem.getClip();
-            clip.open(audioInputStream);
+    private void explode() {
+        // the bomb hits at its center
+        int xExplosion = missile.getX() + missile.getWidth() / 2;
+        int yExplosion = missile.getY() + missile.getHeight() / 2;
 
-            FloatControl gainControl = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
-
-            gainControl.setValue(volume);
-
-            clip.start();
-        } catch (IOException | UnsupportedAudioFileException | LineUnavailableException e) {
-            System.out.println("Error playing sound: " + e.getMessage());
-            e.printStackTrace();
+        List <Ship> ships = sea.getShips();
+        for(int i = 0; i < ships.size(); i++){
+            Ship ship = ships.get(i);
+            boolean insideShip = xExplosion >= ship.getX() && xExplosion <= ship.getX() + ship.getWidth()
+                    && yExplosion >= ship.getY() && yExplosion <= ship.getY() + ship.getHeight();
+            if (insideShip && sea.modifyShips(ship)){
+                missile.setHit(true);
+            }
         }
+
+        if (missile.getHit()){
+            missile.setImage(Images.load("Images/EffectImages/Explosion.png"));
+            Sound.play("Sound/PositiveExplosion.wav", -10.0f, false);
+        }else{
+            missile.setImage(Images.load("Images/EffectImages/WaterExplosion.png"));
+            Sound.play("Sound/NegativeExplosion.wav", 0, false);
+        }
+        missile.setWidth(EXPLOSION_SIZE);
+        missile.setHeight(EXPLOSION_SIZE);
+        missile.setX(xExplosion - EXPLOSION_SIZE / 2);
+        missile.setY(yExplosion - EXPLOSION_SIZE / 2);
     }
 }
